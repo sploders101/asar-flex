@@ -1,40 +1,17 @@
-# async-asar
+# asar-flex
 
-This library creates a class-based interface for reading and streaming asar files from any location.
-By default, it can read from the filesystem or HTTP/HTTPS using the built-in backends.
-However, it allows you to write your own backend using request functions, which only load parts of the file into memory.
-This module does not require any dependencies, and has been split out into different files of varying complexity to keep it lightweight and versatile.
-All of the code has been documented and commented, with typings provided.
+This library aims to make reading & writing asar archives as easy and flexible as possible, and concerns itself only with the specifics of the asar format, rather than delving into fs crawling, etc. This means that you can source files from anywhere, and stream them to anywhere, be it the local filesystem or a remote server.
 
-## File Structure
+Practical applications include pulling individual files out of asar archives stored on an HTTP server, streaming files straight from your build system into the archive, eliminating the need for tmpdirs, etc.
 
-### Readers
-
-#### `index` (contains `EasyAsar`)
-Defines the EasyAsar class that you will most likely use. This extends the `streams` implementation to allow the use of filesystem, HTTP, and HTTPS backends by default. Simply provide a file path or URL to the constructor.
-
-#### `streams` (contains `AsarStreams`)
-This defines the streaming implementation of the asar reader, extending upon the base to allow streaming a file from the archive.
-
-#### `base` (contains `AsarArchive`)
-This defines the base implementation of the asar reader, usable in the browser via a Buffer polyfill.
-
+# Readers
 
 ## Constructors
 
-### `EasyAsar` examples
-```typescript
-const ar = new EasyAsar("/home/user/testing.asar");
-const ar = new EasyAsar("file:///home/user/testing.asar");
-const ar = new EasyAsar("http://example.com/testing.asar");
-const ar = new EasyAsar("https://example.com/testing.asar");
-const ar = new EasyAsar(new URL("file:///home/user/testing.asar"));
-const ar = new EasyAsar(new URL("http://example.com/testing.asar"));
-const ar = new EasyAsar(new URL("https://example.com/testing.asar"));
-```
-This constructor will also accept AsarStreams getter functions
-
 ### `AsarStreams`
+
+`AsarStreams` is the recommended parser, because it not only supports buffer-based implementations, but will also attempt to stream data from them if requested by constructing many consecutive requests. This provides a greater degree of flexibility in the sourcing of data without changing the API.
+
 ```typescript
 const ar = new AsarStreams((offset, length) => {
 	return fs.createReadStream("/path/to/file.asar", {
@@ -43,13 +20,18 @@ const ar = new AsarStreams((offset, length) => {
 	});
 });
 ```
-The getter function can also return a promise resolving the stream
-This constructor will also accept `AsarArchive` getter functions.
+The getter function can also return a promise resolving to the stream.
+This constructor will also accept `AsarArchive`'s buffer-based getter functions, and request individual chunks to emulate a readable stream when using API calls that return a stream.
+
+If you experience performance issues when using buffer-based getter functions, either adapt your function to return a stream instead, or avoid using streaming requests. This can be enforced by using the buffer-based `AsarArchive` implementation, on which this reader was built.
 
 ### `AsarArchive`
+
+This is the buffer-based asar reader implementation. The constructor takes a getter function that can be used to fetch a single chunk of data from the source, given a byte offset and length.
+
 ```typescript
-const ar = AsarArchive((offset, length) => new Promise((res, rej) => {
-	fs.open("/path/to/file.asar", (fd) => {
+fs.open("/path/to/file.asar", (fd) => {
+	const ar = AsarArchive((offset, length) => new Promise((res, rej) => {
 		fs.read(fd, {
 			buffer: Buffer.allocUnsafe(length),
 			position: offset,
@@ -59,10 +41,10 @@ const ar = AsarArchive((offset, length) => new Promise((res, rej) => {
 			if(bytesRead !== length) rej(new Error("Incomplete data"));
 			res(buf);
 		});
-	});
-}));
+	}));
+});
 ```
-The getter can also return the Buffer directly.
+The getter can also return the Buffer directly instead of a promise.
 
 
 ## Methods
@@ -111,6 +93,46 @@ fileStream.on("end", () => console.log("Data finished"));
 ```
 Creates a readable stream through which you can retrieve the file's contents.
 
-### `EasyAsar extends AsarStreams`
+# Writer
 
-EasyAsar only provides built-in backends and thus does not add any new methods
+## Constructor
+```typescript
+const asarBuilder = new AsarWriter();
+```
+
+## Methods
+
+### `addFile`
+
+Writes a file into the archive. Creates parent directories automatically
+
+Files can only be written once. Subsequent writes to the same file will throw an error. It is recommended to buffer inserts and dedupe prior to using this interface.
+
+```typescript
+asarBuilder.addFile({
+	// Path to the file within the asar archive. Uses unix-style "/".
+	path: "path/to/new/file.txt",
+	// Readable stream of the file's contents. This can be sourced from anywhere.
+	// It can also be a buffer, but this is not recommended, and is only used internally for the asar header.
+	stream: fs.createReadStream("file.txt"),
+	// Size of the file. Streams will be trimmed to this length, and a value that is too large will yield undefined behavior
+	size: 20,
+	// Optional attributes for the file, to be injected into the asar index
+	attributes: {
+		// Whether or not to mark the file as executable
+		executable: false,
+	},
+});
+```
+
+### `mkdir`
+
+Creates a new directory within the archive. Also creates parent directories.
+
+```typescript
+asarBuilder.mkdir("path/to/new/directory");
+```
+
+### `createAsarStream`
+
+Returns a stream for the asar file's data. All streams from `addFile` calls will be consumed at this point, and cannot be used again. Attempting to call any other methods on the writer will throw an error, since it may no longer have access to the resources needed to generate another file.

@@ -2,10 +2,12 @@
 import AsarArchive, {
 	AsarGetter,
 	index,
-	isFolder,
 	fsErr,
 	dataOffset,
 } from "./base";
+import {
+	isFolder,
+} from "../common/functions";
 import {
 	Readable,
 } from "stream";

@@ -22,11 +22,16 @@ export interface AddFileOpts {
 }
 
 export class AsarWriter {
-	contentOffset = 0;
-	fileList: SpliceEntry[] = [];
-	index: AsarIndex = {
+	private _consumed = false;
+	private _contentOffset = 0;
+	private _fileList: SpliceEntry[] = [];
+	private _index: AsarIndex = {
 		files: {},
 	};
+
+	get consumed() {
+		return this._consumed;
+	}
 
 	/**
 	 * Add a file to the asar archive
@@ -35,6 +40,7 @@ export class AsarWriter {
 	 * @param opts Information about the file to add
 	 */
 	addFile(opts: AddFileOpts): void {
+		if(this._consumed) throw new Error("Asar file has already been written.");
 
 		// Normalize file path
 		const parentFolder = typeof(opts.path) === "string"
@@ -46,7 +52,7 @@ export class AsarWriter {
 		this.mkdir(parentFolder);
 
 		// Move into the directory
-		let cwd = this.index;
+		let cwd = this._index;
 		for(const step of parentFolder) {
 			// We already verified this was a folder inside mkdir
 			cwd = cwd.files[step] as AsarIndex;
@@ -58,15 +64,15 @@ export class AsarWriter {
 		// Create file in index
 		cwd.files[filename] = {
 			...opts.attributes,
-			offset: String(this.contentOffset),
+			offset: String(this._contentOffset),
 			size: opts.size,
 		} as AsarFile;
 
 		// Increment contentOffset to the next available byte
-		this.contentOffset += opts.size;
+		this._contentOffset += opts.size;
 
 		// Append stream to file list for concatenation on output
-		this.fileList.push({
+		this._fileList.push({
 			size: opts.size,
 			stream: opts.stream,
 		});
@@ -78,11 +84,12 @@ export class AsarWriter {
 	 * @param path Path to new directory
 	 */
 	mkdir(path: string | string[]) {
+		if(this._consumed) throw new Error("Asar file has already been written.");
 		const steps = typeof(path) === "string"
 			? path.split("/")
 			: this.verifyPath(path);
 
-		let cwd = this.index;
+		let cwd = this._index;
 		for(const step of steps) {
 			if(!cwd.files[step]) {
 				cwd.files[step] = { files: { } };
@@ -100,7 +107,7 @@ export class AsarWriter {
 	 */
 	private createAsarHeader() {
 
-		const jsonHeader = JSON.stringify(this.index);
+		const jsonHeader = JSON.stringify(this._index);
 
 		// Align jsonHeader size to 4 bytes, since that's apparently pickle's magic string alignment value
 		const headerSize = this.align(jsonHeader.length, 4);
@@ -134,14 +141,22 @@ export class AsarWriter {
 
 	}
 
+	/**
+	 * Creates a stream for the asar file that writes the header and splices
+	 * together all included files.
+	 *
+	 * This function consumes the data added to the writer.
+	 * All methods called on the writer after the asar stream has been created will throw.
+	 */
 	createAsarStream() {
+		if(this._consumed) throw new Error("Asar file has already been written.");
 		const header = this.createAsarHeader();
 		return new StreamSplicer([
 			{
 				size: header.length,
 				stream: header,
 			},
-			...this.fileList,
+			...this._fileList,
 		]);
 	}
 
@@ -156,6 +171,15 @@ export class AsarWriter {
 		return path;
 	}
 
+	/**
+	 * Rounds a length up to the next multiple of alignTo, for aligning data to the size of
+	 * a variable type
+	 *
+	 * Used for minimal chromium-pickle implementation, which stupidly references strings as
+	 * UInt32 (usually 4 characters) values instead of UInt8 (usually one character)
+	 * @param i Current length
+	 * @param alignTo Size of type to align to
+	 */
 	private align(i: number, alignTo: number) {
 		return i + (alignTo - (i % alignTo)) % alignTo;
 	}

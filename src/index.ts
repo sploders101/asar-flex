@@ -1,5 +1,6 @@
 export {
-	EasyAsar,
+	AsarGetter,
+	AsarGetterStream,
 } from "./reader";
 export {
 	AsarWriter,
