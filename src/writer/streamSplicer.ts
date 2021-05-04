@@ -4,7 +4,7 @@ import {
 
 export interface SpliceEntry {
 	size: number;
-	stream: Readable | Buffer;
+	stream: NodeJS.ReadableStream | Buffer;
 }
 
 export class StreamSplicer extends Readable {
@@ -37,7 +37,7 @@ export class StreamSplicer extends Readable {
 				let data: Buffer | string | null = currentPiece.stream.read(Math.min(size, toRead));
 				if(data == null) {
 					// Wait for data to become available
-					await new Promise((res) => (currentPiece.stream as Readable).once("readable", res));
+					await new Promise((res) => (currentPiece.stream as NodeJS.ReadableStream).once("readable", res));
 				} else {
 					data = Buffer.from(data);
 					this.bytesRead += Math.min(toRead, data.length);

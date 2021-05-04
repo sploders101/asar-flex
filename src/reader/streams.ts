@@ -67,7 +67,7 @@ class AsarChunkStream extends Readable {
 /**
  * Getter type for stream-based reads
  */
-export type AsarGetterStream = (offset: number, length: number) => Readable | Promise<Readable>;
+export type AsarGetterStream = (offset: number, length: number) => NodeJS.ReadableStream | Promise<NodeJS.ReadableStream>;
 
 export default class AsarStreams extends AsarArchive {
 	[getterType]: "chunk" | "stream" | null = null;
@@ -100,7 +100,7 @@ export default class AsarStreams extends AsarArchive {
 			} else if(this[getterType] === "stream") {
 				// If it's a stream, collect all of the data before returning.
 				return await new Promise<Buffer>((res, rej) => {
-					const resStream = result as Readable;
+					const resStream = result as NodeJS.ReadableStream;
 					const data = [];
 					resStream.on("data", (chunk) => data.push(chunk));
 					resStream.on("end", () => res(Buffer.concat(data)));
@@ -121,7 +121,7 @@ export default class AsarStreams extends AsarArchive {
 		if(isFolder(fileIndex)) throw fsErr("EISDIR: illegal operation on a directory, read", "EISDIR", -21, "read");
 		const offset = this[dataOffset] + Number(fileIndex.offset);
 		if(this[getterType] === "stream") {
-			return await this[streamGetter](offset, fileIndex.size) as Readable;
+			return await this[streamGetter](offset, fileIndex.size) as NodeJS.ReadableStream;
 		} else if(this[getterType] === "chunk") {
 			return new AsarChunkStream(this[streamGetter] as AsarGetter, offset, fileIndex.size);
 		}
