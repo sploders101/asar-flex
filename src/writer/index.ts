@@ -16,7 +16,7 @@ import {
 
 export interface AddFileOpts {
 	path: string | string[];
-	stream: Readable;
+	stream: Readable | Buffer;
 	size: number;
 	attributes?: AsarFileAttributes;
 }
