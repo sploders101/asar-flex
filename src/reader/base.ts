@@ -1,10 +1,10 @@
 import {
 	AsarIndex,
 	AsarFile,
-} from "src/common/types";
+} from "../common/types";
 import {
 	isFolder,
-} from "src/common/functions";
+} from "../common/functions";
 
 /**
  * Function type for an AsarArchive getter.
