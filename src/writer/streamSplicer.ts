@@ -31,7 +31,8 @@ export class StreamSplicer extends Readable {
 
 			// Keep reading
 			if(Buffer.isBuffer(currentPiece.stream)) {
-				reading = this.push(currentPiece.stream.slice(0, currentPiece.size));
+				reading = false;
+				this.push(currentPiece.stream.slice(0, currentPiece.size));
 				this.bytesRead = currentPiece.size;
 			} else {
 				let data: Buffer | string | null = currentPiece.stream.read(Math.min(size, toRead));
@@ -41,7 +42,8 @@ export class StreamSplicer extends Readable {
 				} else {
 					data = Buffer.from(data);
 					this.bytesRead += Math.min(toRead, data.length);
-					reading = this.push(data.slice(0, toRead));
+					reading = false;
+					this.push(data.slice(0, toRead));
 				}
 			}
 		}
