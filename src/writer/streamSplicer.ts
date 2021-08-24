@@ -27,7 +27,7 @@ export class StreamSplicer extends Readable {
 				this.currentIndex++;
 				this.bytesRead = 0;
 				continue;
-			} else if(toRead < 0) throw new Error("StreamSplicer pushed too much data");
+			} else if(toRead < 0) this.emit("error", new Error("StreamSplicer pushed too much data"));
 
 			// Keep reading
 			if(Buffer.isBuffer(currentPiece.stream)) {
